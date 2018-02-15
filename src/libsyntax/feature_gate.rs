@@ -449,6 +449,9 @@ declare_features! (
 
     // Use `?` as the Kleene "at most one" operator
     (active, macro_at_most_once_rep, "1.25.0", Some(48075)),
+
+    // allows definition of C style variadic functions
+    (active, c_variadic_fn_def, "1.26.0", Some(44930)),
 );
 
 declare_features! (
