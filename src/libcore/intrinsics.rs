@@ -51,17 +51,17 @@
                    since = "1.18.0")]
 pub use ptr::drop_in_place;
 
-#[unstable(feature = "c_variadic_fn_def", reason = "recently added", issue = "44930")]
+#[unstable(feature = "c_variadic", reason = "recently added", issue = "44930")]
 pub struct VaList<'a> {
 }
 
 impl<'a> VaList<'a> {
-    #[unstable(feature = "c_variadic_fn_def", reason = "recently added", issue = "44930")]
+    #[unstable(feature = "c_variadic", reason = "recently added", issue = "44930")]
     pub unsafe fn arg<T>(&mut self) -> T {
         unimplemented!()
     }
 
-    #[unstable(feature = "c_variadic_fn_def", reason = "recently added", issue = "44930")]
+    #[unstable(feature = "c_variadic", reason = "recently added", issue = "44930")]
     pub fn copy<'ret, F, T>(&self, F) -> T
     where
         T: 'ret,
