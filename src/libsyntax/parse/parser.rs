@@ -1360,7 +1360,7 @@ impl<'a> Parser<'a> {
         };
 
         self.expect_keyword(keywords::Fn)?;
-        let (inputs, variadic) = self.parse_fn_args(false, true)?;
+        let (inputs, variadic) = self.parse_fn_args(false)?;
         let ret_ty = self.parse_ret_ty(false)?;
         let decl = P(FnDecl {
             inputs,
@@ -1587,6 +1587,9 @@ impl<'a> Parser<'a> {
             // Reference
             self.expect_and()?;
             self.parse_borrowed_pointee()?
+        } else if self.eat(&token::DotDotDot) {
+            // Variable argument list `...`
+            TyKind::Path(None, ast::Path::from_ident(self.span, Ident::from_str("::core::intrinsics::VaList")))
         } else if self.eat_keyword_noexpect(keywords::Typeof) {
             // `typeof(EXPR)`
             // In order to not be ambiguous, the type must be surrounded by parens.
@@ -4847,8 +4850,8 @@ impl<'a> Parser<'a> {
         Ok(where_clause)
     }
 
-    fn parse_fn_args(&mut self, named_args: bool, allow_variadic: bool)
-                     -> PResult<'a, (Vec<Arg> , bool)> {
+    fn parse_fn_args(&mut self, named_args: bool)
+                     -> PResult<'a, (Vec<Arg>, bool)> {
         let sp = self.span;
         let mut variadic = false;
         let args: Vec<Option<Arg>> =
@@ -4859,16 +4862,10 @@ impl<'a> Parser<'a> {
                 |p| {
                     if p.token == token::DotDotDot {
                         p.bump();
-                        if allow_variadic {
-                            if p.token != token::CloseDelim(token::Paren) {
-                                let span = p.span;
-                                p.span_err(span,
-                                    "`...` must be last in argument list for variadic function");
-                            }
-                        } else {
+                        if p.token != token::CloseDelim(token::Paren) {
                             let span = p.span;
                             p.span_err(span,
-                                       "only foreign functions are allowed to be variadic");
+                                "`...` must be last in argument list for variadic function");
                         }
                         variadic = true;
                         Ok(None)
@@ -4900,9 +4897,8 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse the argument list and result type of a function declaration
-    pub fn parse_fn_decl(&mut self, allow_variadic: bool) -> PResult<'a, P<FnDecl>> {
-
-        let (args, variadic) = self.parse_fn_args(true, allow_variadic)?;
+    pub fn parse_fn_decl(&mut self) -> PResult<'a, P<FnDecl>> {
+        let (args, variadic) = self.parse_fn_args(true)?;
         let ret_ty = self.parse_ret_ty(true)?;
 
         Ok(P(FnDecl {
@@ -5102,7 +5098,7 @@ impl<'a> Parser<'a> {
                      abi: Abi)
                      -> PResult<'a, ItemInfo> {
         let (ident, mut generics) = self.parse_fn_header()?;
-        let decl = self.parse_fn_decl(false)?;
+        let decl = self.parse_fn_decl()?;
         generics.where_clause = self.parse_where_clause()?;
         let (inner_attrs, body) = self.parse_inner_attrs_and_block()?;
         Ok((ident, ItemKind::Fn(decl, unsafety, constness, abi, generics, body), Some(inner_attrs)))
@@ -6049,7 +6045,7 @@ impl<'a> Parser<'a> {
         self.expect_keyword(keywords::Fn)?;
 
         let (ident, mut generics) = self.parse_fn_header()?;
-        let decl = self.parse_fn_decl(true)?;
+        let decl = self.parse_fn_decl()?;
         generics.where_clause = self.parse_where_clause()?;
         let hi = self.span;
         self.expect(&token::Semi)?;

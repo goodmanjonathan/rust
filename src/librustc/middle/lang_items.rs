@@ -342,6 +342,8 @@ language_item_table! {
     U128ShroFnLangItem,              "u128_shro",               u128_shro_fn;
 
     TerminationTraitLangItem,        "termination",             termination;
+
+    VaListLangItem,                  "va_list",                 va_list;
 }
 
 impl<'a, 'tcx, 'gcx> TyCtxt<'a, 'tcx, 'gcx> {

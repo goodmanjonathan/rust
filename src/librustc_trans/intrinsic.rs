@@ -409,6 +409,14 @@ pub fn trans_intrinsic_call<'a, 'tcx>(bx: &Builder<'a, 'tcx>,
             // `if offset == 0 { 0 } else { align - offset }`
             bx.select(is_zero, zero, bx.sub(align, offset))
         }
+
+        intrinsic @ "va_start"
+        | intrinsic @ "va_end"
+        | intrinsic @ "va_copy" => {
+            let intrinsic = bx.cx.get_intrinsic(intrinsic);
+            bx.call(intrinsic, args, None)
+        }
+
         name if name.starts_with("simd_") => {
             match generic_simd_intrinsic(bx, name,
                                          callee_ty,

@@ -9,3 +9,5 @@
 // except according to those terms.
 
 pub unsafe extern "C" fn f(a: i32, _: ...) {} //~ ERROR variadic fn definition is unstable
+
+fn main() {}

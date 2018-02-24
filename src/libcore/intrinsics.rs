@@ -51,23 +51,41 @@
                    since = "1.18.0")]
 pub use ptr::drop_in_place;
 
+#[cfg(not(stage0))]
+use super::marker::PhantomData;
+#[cfg(not(stage0))]
+use super::fmt;
+
 #[unstable(feature = "c_variadic", reason = "recently added", issue = "44930")]
+//#[lang = "va_list"]
+#[cfg(not(stage0))]
 pub struct VaList<'a> {
+    _phantom: PhantomData<&'a ()> // FIXME: variance
 }
 
+#[cfg(not(stage0))]
+#[unstable(feature = "c_variadic", reason = "recently added", issue = "44930")]
 impl<'a> VaList<'a> {
     #[unstable(feature = "c_variadic", reason = "recently added", issue = "44930")]
     pub unsafe fn arg<T>(&mut self) -> T {
-        unimplemented!()
+        va_arg(self)
     }
 
     #[unstable(feature = "c_variadic", reason = "recently added", issue = "44930")]
-    pub fn copy<'ret, F, T>(&self, F) -> T
+    pub fn copy<'ret, F, T>(&self, _f: F) -> T
     where
         T: 'ret,
         F: for<'copy> FnOnce(VaList<'copy>) -> T,
     {
         unimplemented!()
+    }
+}
+
+#[cfg(not(stage0))]
+#[unstable(feature = "c_variadic", reason = "recently added", issue = "44930")]
+impl<'a> fmt::Debug for VaList<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.pad("VaList")
     }
 }
 
@@ -1411,4 +1429,13 @@ extern "rust-intrinsic" {
     /// Emits a `!nontemporal` store according to LLVM (see their docs).
     /// Probably will never become stable.
     pub fn nontemporal_store<T>(ptr: *mut T, val: T);
+
+    #[cfg(not(stage0))]
+    pub fn va_arg<T>(va_list: &mut VaList) -> T;
+    #[cfg(not(stage0))]
+    pub fn va_start(va_list: &mut VaList);
+    #[cfg(not(stage0))]
+    pub fn va_end(va_list: &mut VaList);
+    #[cfg(not(stage0))]
+    pub fn va_copy<'a>(va_list: &VaList<'a>) -> VaList<'a>;
 }

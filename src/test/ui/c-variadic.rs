@@ -17,3 +17,5 @@ pub unsafe extern "C" fn g(_: i32, _: ..., _: u8) {} //~ ERROR variable argument
 pub unsafe fn h(_: i32, _: ...) {} //~ ERROR variadic fn must have `C` ABI
 
 pub extern "C" fn i(_: i32, _: ...) {} //~ ERROR variadic fn must be `unsafe`
+
+fn main() {}
