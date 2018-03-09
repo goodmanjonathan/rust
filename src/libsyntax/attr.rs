@@ -573,6 +573,25 @@ pub fn find_unwind_attr(diagnostic: Option<&Handler>, attrs: &[Attribute]) -> Op
     })
 }
 
+pub fn find_non_exhaustive_attr(diagnostic: &Handler, attrs: &[Attribute]) -> Option<()> {
+    attrs.iter().fold(None, |ia, attr| {
+        if attr.path != "non_exhaustive" {
+            return ia;
+        }
+
+        match attr.meta().map(|meta_item| meta_item.node) {
+            None => ia,
+            Some(MetaItemKind::Word) => Some(()),
+            _ => {
+                span_err!(diagnostic,
+                          attr.span,
+                          E0699,
+                          "malformed `#[non_exhaustive]` attribute");
+                Some(())
+            }
+        }
+    })
+}
 
 /// Tests if a cfg-pattern matches the cfg set
 pub fn cfg_matches(cfg: &ast::MetaItem, sess: &ParseSess, features: Option<&Features>) -> bool {

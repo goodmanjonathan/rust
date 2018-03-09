@@ -58,7 +58,9 @@ impl<'a, 'tcx> CheckAttrVisitor<'a, 'tcx> {
         for attr in &item.attrs {
             if let Some(name) = attr.name() {
                 if name == "inline" {
-                    self.check_inline(attr, item, target)
+                    self.check_inline(attr, item, target);
+                } else if name == "non_exhaustive" {
+                    self.check_non_exhaustive(attr, item, target);
                 }
             }
         }
@@ -74,6 +76,17 @@ impl<'a, 'tcx> CheckAttrVisitor<'a, 'tcx> {
                              E0518,
                              "attribute should be applied to function")
                 .span_label(item.span, "not a function")
+                .emit();
+        }
+    }
+
+    fn check_non_exhaustive(&self, attr: &hir::Attribute, item: &hir::Item, target: Target) {
+        if target != Target::Struct && target != Target::Enum {
+            struct_span_err!(self.tcx.sess,
+                             attr.span,
+                             E0698,
+                             "attribute should be applied to struct or enum definition")
+                .span_label(item.span, "not a struct or enum definition")
                 .emit();
         }
     }

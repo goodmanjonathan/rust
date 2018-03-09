@@ -1689,7 +1689,7 @@ impl<'a, 'gcx, 'tcx> AdtDef {
         if Some(did) == tcx.lang_items().owned_box() {
             flags = flags | AdtFlags::IS_BOX;
         }
-        if tcx.has_attr(did, "non_exhaustive") {
+        if let Some(_) = attr::find_non_exhaustive_attr(tcx.sess.diagnostic(), &*attrs) {
             flags = flags | AdtFlags::IS_NON_EXHAUSTIVE;
         }
         match kind {
