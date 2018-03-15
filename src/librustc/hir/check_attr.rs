@@ -16,8 +16,87 @@
 
 use ty::TyCtxt;
 
+use syntax::ast;
+use syntax_pos::Span;
 use hir;
 use hir::intravisit::{self, Visitor, NestedVisitorMap};
+
+/// An abstraction over anything that an attribute may be affixed to.
+#[derive(Debug, Copy, Clone)]
+enum AttributeTarget<'a> {
+    ExternCrate(&'a hir::Item),
+    Use(&'a hir::Item),
+    Static(&'a hir::Item),
+    Const(&'a hir::Item),
+    Fn(&'a hir::Item),
+    Mod(&'a hir::Item),
+    ForeignMod(&'a hir::Item),
+    GlobalAsm(&'a hir::Item),
+    TypeAlias(&'a hir::Item),
+    Enum(&'a hir::Item),
+    Struct(&'a hir::Item),
+    Union(&'a hir::Item),
+    Trait(&'a hir::Item),
+    TraitAlias(&'a hir::Item),
+    Impl(&'a hir::Item),
+
+    TraitAssociatedConst(&'a hir::TraitItem),
+    TraitMethod(&'a hir::TraitItem),
+    TraitAssociatedType(&'a hir::TraitItem),
+
+    ImplAssociatedConst(&'a hir::ImplItem),
+    ImplMethod(&'a hir::ImplItem),
+    ImplAssociatedTyoe(&'a hir::ImplItem),
+
+    ForeignFn(&'a hir::ForeignItem),
+    ForeignStatic(&'a hir::ForeignItem),
+    ForeignType(&'a hir::ForeignItem),
+
+    Asm,
+
+    Crate(&'a hir::Crate),
+
+    Variant,
+
+    Field,
+
+    MacroDef(&'a hir::MacroDef),
+
+    MatchArm(&'a hir::Arm),
+
+    Stmt(&'a hir::Stmt),
+
+    Expr(&'a hir::Expr),
+}
+
+impl<'a> AttributeTarget<'a> {
+    fn id(self) -> hir::NodeId {
+        match self {
+            AttributeTarget::Item(item) => item.id,
+            AttributeTarget::TraitItem(item) => item.id,
+            AttributeTarget::ImplItem(item) => item.id,
+            AttributeTarget::ForeignItem(item) => item.id,
+        }
+    }
+
+    fn attrs(self) -> &'a hir::HirVec<ast::Attribute> {
+        match self {
+            AttributeTarget::Item(item) => &item.attrs,
+            AttributeTarget::TraitItem(item) => &item.attrs,
+            AttributeTarget::ImplItem(item) => &item.attrs,
+            AttributeTarget::ForeignItem(item) => &item.attrs,
+        }
+    }
+
+    fn span(self) -> Span {
+        match self {
+            AttributeTarget::Item(item) => item.span,
+            AttributeTarget::TraitItem(item) => item.span,
+            AttributeTarget::ImplItem(item) => item.span,
+            AttributeTarget::ForeignItem(item) => item.span,
+        }
+    }
+}
 
 #[derive(Copy, Clone, PartialEq)]
 enum Target {
@@ -29,13 +108,35 @@ enum Target {
 }
 
 impl Target {
-    fn from_item(item: &hir::Item) -> Target {
-        match item.node {
-            hir::ItemFn(..) => Target::Fn,
-            hir::ItemStruct(..) => Target::Struct,
-            hir::ItemUnion(..) => Target::Union,
-            hir::ItemEnum(..) => Target::Enum,
-            _ => Target::Other,
+    fn from_item(item: AttributeTarget) -> Target {
+        match item {
+            AttributeTarget::Item(item) => {
+                match item.node {
+                    hir::ItemFn(..) => Target::Fn,
+                    hir::ItemStruct(..) => Target::Struct,
+                    hir::ItemUnion(..) => Target::Union,
+                    hir::ItemEnum(..) => Target::Enum,
+                    _ => Target::Other,
+                }
+            }
+            AttributeTarget::TraitItem(item) => {
+                match item.node {
+                    hir::TraitItemKind::Method(..) => Target::Fn,
+                    _ => Target::Other,
+                }
+            }
+            AttributeTarget::ImplItem(item) => {
+                match item.node {
+                    hir::ImplItemKind::Method(..) => Target::Fn,
+                    _ => Target::Other,
+                }
+            }
+            AttributeTarget::ForeignItem(item) => {
+                match item.node {
+                    hir::ForeignItem_::ForeignItemFn(..) => Target::Fn,
+                    _ => Target::Other,
+                }
+            }
         }
     }
 }
@@ -46,16 +147,16 @@ struct CheckAttrVisitor<'a, 'tcx: 'a> {
 
 impl<'a, 'tcx> CheckAttrVisitor<'a, 'tcx> {
     /// Check any attribute.
-    fn check_attributes(&self, item: &hir::Item, target: Target) {
+    fn check_attributes(&self, item: AttributeTarget, target: Target) {
         if target == Target::Fn {
-            self.tcx.trans_fn_attrs(self.tcx.hir.local_def_id(item.id));
-        } else if let Some(a) = item.attrs.iter().find(|a| a.check_name("target_feature")) {
+            self.tcx.trans_fn_attrs(self.tcx.hir.local_def_id(item.id()));
+        } else if let Some(a) = item.attrs().iter().find(|a| a.check_name("target_feature")) {
             self.tcx.sess.struct_span_err(a.span, "attribute should be applied to a function")
-                .span_label(item.span, "not a function")
+                .span_label(item.span(), "not a function")
                 .emit();
         }
 
-        for attr in &item.attrs {
+        for attr in item.attrs() {
             if let Some(name) = attr.name() {
                 if name == "inline" {
                     self.check_inline(attr, item, target);
@@ -69,36 +170,36 @@ impl<'a, 'tcx> CheckAttrVisitor<'a, 'tcx> {
     }
 
     /// Check if an `#[inline]` is applied to a function.
-    fn check_inline(&self, attr: &hir::Attribute, item: &hir::Item, target: Target) {
+    fn check_inline(&self, attr: &hir::Attribute, item: AttributeTarget, target: Target) {
         if target != Target::Fn {
             struct_span_err!(self.tcx.sess,
                              attr.span,
                              E0518,
                              "attribute should be applied to function")
-                .span_label(item.span, "not a function")
+                .span_label(item.span(), "not a function")
                 .emit();
         }
     }
 
-    fn check_non_exhaustive(&self, attr: &hir::Attribute, item: &hir::Item, target: Target) {
+    fn check_non_exhaustive(&self, attr: &hir::Attribute, item: AttributeTarget, target: Target) {
         if target != Target::Struct && target != Target::Enum {
             struct_span_err!(self.tcx.sess,
                              attr.span,
                              E0698,
                              "attribute should be applied to struct or enum definition")
-                .span_label(item.span, "not a struct or enum definition")
+                .span_label(item.span(), "not a struct or enum definition")
                 .emit();
         }
     }
 
     /// Check if the `#[repr]` attributes on `item` are valid.
-    fn check_repr(&self, item: &hir::Item, target: Target) {
+    fn check_repr(&self, item: AttributeTarget, target: Target) {
         // Extract the names of all repr hints, e.g., [foo, bar, align] for:
         // ```
         // #[repr(foo)]
         // #[repr(bar, align(8))]
         // ```
-        let hints: Vec<_> = item.attrs
+        let hints: Vec<_> = item.attrs()
             .iter()
             .filter(|attr| match attr.name() {
                 Some(name) => name == "repr",
@@ -179,7 +280,7 @@ impl<'a, 'tcx> CheckAttrVisitor<'a, 'tcx> {
             };
             struct_span_err!(self.tcx.sess, hint.span, E0517,
                              "attribute should be applied to {}", allowed_targets)
-                .span_label(item.span, format!("not {} {}", article, allowed_targets))
+                .span_label(item.span(), format!("not {} {}", article, allowed_targets))
                 .emit();
         }
 
@@ -210,9 +311,38 @@ impl<'a, 'tcx> Visitor<'tcx> for CheckAttrVisitor<'a, 'tcx> {
     }
 
     fn visit_item(&mut self, item: &'tcx hir::Item) {
-        let target = Target::from_item(item);
-        self.check_attributes(item, target);
+        let item_like = AttributeTarget::Item(item);
+        let target = Target::from_item(item_like);
+        self.check_attributes(item_like, target);
         intravisit::walk_item(self, item);
+    }
+
+    fn visit_trait_item(&mut self, item: &'tcx hir::TraitItem) {
+        let item_like = AttributeTarget::TraitItem(item);
+        let target = Target::from_item(item_like);
+        self.check_attributes(item_like, target);
+        intravisit::walk_trait_item(self, item);
+    }
+
+    fn visit_impl_item(&mut self, item: &'tcx hir::ImplItem) {
+        let item_like = AttributeTarget::ImplItem(item);
+        let target = Target::from_item(item_like);
+        self.check_attributes(item_like, target);
+        intravisit::walk_impl_item(self, item);
+    }
+
+    fn visit_foreign_item(&mut self, item: &'tcx hir::ForeignItem) {
+        let item_like = AttributeTarget::ForeignItem(item);
+        let target = Target::from_item(item_like);
+        self.check_attributes(item_like, target);
+        intravisit::walk_foreign_item(self, item);
+    }
+
+    fn visit_generic_param(&mut self, param: &hir::GenericParam) {
+
+    }
+
+    fn visit_macro_def(&mut self, macro_def: &hir::MacroDef) {
     }
 }
 
@@ -221,16 +351,17 @@ pub fn check_crate<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>) {
     tcx.hir.krate().visit_all_item_likes(&mut checker.as_deep_visitor());
 }
 
-fn is_c_like_enum(item: &hir::Item) -> bool {
-    if let hir::ItemEnum(ref def, _) = item.node {
-        for variant in &def.variants {
-            match variant.node.data {
-                hir::VariantData::Unit(_) => { /* continue */ }
-                _ => { return false; }
+fn is_c_like_enum(item: AttributeTarget) -> bool {
+    if let AttributeTarget::Item(item) = item {
+        if let hir::ItemEnum(ref def, _) = item.node {
+            for variant in &def.variants {
+                match variant.node.data {
+                    hir::VariantData::Unit(_) => { /* continue */ }
+                    _ => { return false; }
+                }
             }
+            return true;
         }
-        true
-    } else {
-        false
     }
+    false
 }

@@ -13,6 +13,8 @@
 
 #![no_std]
 #![feature(non_exhaustive)]
+#![feature(global_asm)]
+#![feature(trait_alias)]
 
 #![non_exhaustive] //~ ERROR attribute should be applied to struct or enum definition [E0698]
 
@@ -28,7 +30,22 @@ extern crate std;
 use std as other_std;
 
 #[non_exhaustive] //~ ERROR attribute should be applied to struct or enum definition [E0698]
-extern {}
+extern {
+    #[non_exhaustive] //~ ERROR attribute should be applied to struct or enum definition [E0698]
+    fn ffn();
+}
+
+#[non_exhaustive] //~ ERROR attribute should be applied to struct or enum definition [E0698]
+global_asm!(r#"
+    .global foo
+  foo:
+    jmp baz
+"#);
+
+#[non_exhaustive] //~ ERROR attribute should be applied to struct or enum definition [E0698]
+macro_rules! m {
+    () => {}
+}
 
 #[non_exhaustive] //~ ERROR attribute should be applied to struct or enum definition [E0698]
 trait Trait {
@@ -56,6 +73,10 @@ impl Trait for usize {
 
 #[non_exhaustive] //~ ERROR attribute should be applied to struct or enum definition [E0698]
 type T = i32;
+
+// FIXME: trait aliases are not fully implemented (issue #41517)
+//#[non_exhaustive] // attribute should be applied to struct or enum definition [E0698]
+//trait OtherTrait = Trait;
 
 #[non_exhaustive] //~ ERROR attribute should be applied to struct or enum definition [E0698]
 fn bar() {}
